@@ -4,17 +4,23 @@ import com.goterl.lazysodium.LazySodiumAndroid
 import com.goterl.lazysodium.interfaces.Box
 import com.goterl.lazysodium.interfaces.SecretBox
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import java.security.MessageDigest
 import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * End-to-End Encryption engine for GPS payloads.
+ * End-to-End Encryption engine for relay payloads.
  *
  * Uses Lazysodium (libsodium) for:
  *   - crypto_box_seal()     → encrypt to a public key (anonymous sender)
  *   - crypto_box_seal_open() → decrypt with private key
+ *
+ * Supports typed payloads:
+ *   - "gps" — proximity pings (lat/lng)
+ *   - "msg" — chat messages
+ *   - "pin" — precise location pins (opens in Google Maps)
  *
  * Each encrypted payload contains a nonce + timestamp for replay protection.
  * Recipients reject payloads older than MAX_AGE_SECONDS or with a seen nonce.
@@ -38,14 +44,19 @@ class E2EEEngine(private val keyManager: KeyManager) {
     // ── Payload Data Classes ────────────────────────────────────────────
 
     /**
-     * The plaintext structure encrypted inside each envelope.
-     * Serialized as JSON before encryption.
+     * Generic typed payload. The `type` field determines which fields are used:
+     *   - "gps": lat, lng, ts, nonce
+     *   - "msg": text, ts, nonce
+     *   - "pin": lat, lng, label, ts, nonce
      */
-    data class GpsPayload(
-        val lat: Double,
-        val lng: Double,
-        val ts: Long,       // Unix epoch seconds
-        val nonce: String   // Random UUID to prevent replay
+    data class RelayPayload(
+        val type: String,        // "gps", "msg", or "pin"
+        val lat: Double? = null,
+        val lng: Double? = null,
+        val text: String? = null,
+        val label: String? = null,
+        val ts: Long,
+        val nonce: String
     )
 
     // ── Encrypt ─────────────────────────────────────────────────────────
@@ -53,35 +64,82 @@ class E2EEEngine(private val keyManager: KeyManager) {
     /**
      * Encrypt a GPS payload for a specific friend using crypto_box_seal.
      *
-     * crypto_box_seal uses an ephemeral X25519 keypair internally, so the
-     * sender remains anonymous — only the recipient can decrypt with their
-     * private key. This is exactly what we want for the blind relay.
-     *
      * @param latitude  Current latitude
      * @param longitude Current longitude
      * @param recipientPublicKey Friend's X25519 public key (32 bytes)
-     * @return Encrypted payload bytes, ready to be base64-encoded for the relay
+     * @return Encrypted payload bytes
      */
     fun encryptPayload(
         latitude: Double,
         longitude: Double,
         recipientPublicKey: ByteArray
     ): ByteArray {
-        require(recipientPublicKey.size == Box.PUBLICKEYBYTES) {
-            "Invalid public key size: ${recipientPublicKey.size}"
-        }
-
-        // Build the plaintext with replay protection fields
-        val payload = GpsPayload(
+        val payload = RelayPayload(
+            type = "gps",
             lat = latitude,
             lng = longitude,
             ts = System.currentTimeMillis() / 1000,
             nonce = UUID.randomUUID().toString()
         )
-        val plaintext = gson.toJson(payload).toByteArray(Charsets.UTF_8)
+        return sealEncrypt(payload, recipientPublicKey)
+    }
 
-        // crypto_box_seal: anonymous authenticated encryption to a public key
-        // Output size = SEALBYTES + plaintext length
+    /**
+     * Encrypt a chat message for a specific friend.
+     *
+     * @param message   The message text
+     * @param recipientPublicKey Friend's X25519 public key (32 bytes)
+     * @return Encrypted payload bytes
+     */
+    fun encryptMessage(
+        message: String,
+        recipientPublicKey: ByteArray
+    ): ByteArray {
+        val payload = RelayPayload(
+            type = "msg",
+            text = message,
+            ts = System.currentTimeMillis() / 1000,
+            nonce = UUID.randomUUID().toString()
+        )
+        return sealEncrypt(payload, recipientPublicKey)
+    }
+
+    /**
+     * Encrypt a location pin for a specific friend.
+     * The recipient can tap to open the pin in Google Maps.
+     *
+     * @param latitude  Precise latitude
+     * @param longitude Precise longitude
+     * @param label     Optional label (e.g. "Meet me here")
+     * @param recipientPublicKey Friend's X25519 public key (32 bytes)
+     * @return Encrypted payload bytes
+     */
+    fun encryptLocationPin(
+        latitude: Double,
+        longitude: Double,
+        label: String?,
+        recipientPublicKey: ByteArray
+    ): ByteArray {
+        val payload = RelayPayload(
+            type = "pin",
+            lat = latitude,
+            lng = longitude,
+            label = label,
+            ts = System.currentTimeMillis() / 1000,
+            nonce = UUID.randomUUID().toString()
+        )
+        return sealEncrypt(payload, recipientPublicKey)
+    }
+
+    /**
+     * Common crypto_box_seal encryption.
+     */
+    private fun sealEncrypt(payload: RelayPayload, recipientPublicKey: ByteArray): ByteArray {
+        require(recipientPublicKey.size == Box.PUBLICKEYBYTES) {
+            "Invalid public key size: ${recipientPublicKey.size}"
+        }
+
+        val plaintext = gson.toJson(payload).toByteArray(Charsets.UTF_8)
         val ciphertext = ByteArray(Box.SEALBYTES + plaintext.size)
         val success = sodium.cryptoBoxSeal(
             ciphertext,
@@ -97,16 +155,16 @@ class E2EEEngine(private val keyManager: KeyManager) {
     // ── Decrypt ─────────────────────────────────────────────────────────
 
     /**
-     * Decrypt a received GPS payload using our private key.
+     * Decrypt a received payload using our private key.
      *
      * Enforces replay protection:
      *   1. Rejects payloads older than MAX_AGE_SECONDS
      *   2. Rejects payloads with previously-seen nonces
      *
-     * @param ciphertext The encrypted bytes from the relay envelope
-     * @return Decrypted GpsPayload, or null if decryption fails or replay detected
+     * @param ciphertext The encrypted bytes from the relay/mesh envelope
+     * @return Decrypted RelayPayload, or null if decryption fails or replay detected
      */
-    fun decryptPayload(ciphertext: ByteArray): GpsPayload? {
+    fun decryptPayload(ciphertext: ByteArray): RelayPayload? {
         val publicKey = keyManager.getPublicKey() ?: return null
         val privateKey = keyManager.getPrivateKey() ?: return null
 
@@ -126,7 +184,7 @@ class E2EEEngine(private val keyManager: KeyManager) {
 
         // Parse the JSON payload
         val payload = try {
-            gson.fromJson(String(plaintext, Charsets.UTF_8), GpsPayload::class.java)
+            gson.fromJson(String(plaintext, Charsets.UTF_8), RelayPayload::class.java)
         } catch (e: Exception) {
             return null
         }
@@ -163,9 +221,6 @@ class E2EEEngine(private val keyManager: KeyManager) {
      *
      * token = HMAC-SHA256(key = sharedSecret ‖ epochId, data = senderPublicKey)
      *
-     * Only the intended friend (who holds the same sharedSecret) can
-     * derive the same token, so the server never sees a stable identifier.
-     *
      * @param sharedSecret The ECDH shared secret with this friend (32 bytes)
      * @param epochId      Current salt epoch ID from the relay server
      * @param publicKey    The public key to tokenize (sender's or friend's)
@@ -176,7 +231,6 @@ class E2EEEngine(private val keyManager: KeyManager) {
         epochId: Int,
         publicKey: ByteArray
     ): String {
-        // Key = sharedSecret ‖ epochId (as 4-byte big-endian)
         val epochBytes = byteArrayOf(
             (epochId shr 24).toByte(),
             (epochId shr 16).toByte(),

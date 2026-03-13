@@ -1,5 +1,6 @@
 package com.nfriend.app.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -12,20 +13,25 @@ import com.nfriend.app.R
 import com.nfriend.app.crypto.E2EEEngine
 import com.nfriend.app.crypto.KeyManager
 import com.nfriend.app.data.FriendRepository
+import com.nfriend.app.data.RangePreferences
 import com.nfriend.app.location.GeohashEncoder
 import com.nfriend.app.location.ProximityChecker
+import com.nfriend.app.network.ConnectivityObserver
 import com.nfriend.app.network.RelayClient
 import kotlinx.coroutines.*
 
 /**
  * Shows nearby friends with distance information.
- * Runs proximity checks on a periodic loop.
+ * Tapping a friend opens the chat screen.
+ * Displays connectivity status (🌐 online / 📡 mesh).
  */
 class ProximityFragment : Fragment() {
 
     private lateinit var keyManager: KeyManager
     private lateinit var friendRepo: FriendRepository
+    private lateinit var rangePrefs: RangePreferences
     private lateinit var proximityChecker: ProximityChecker
+    private lateinit var connectivity: ConnectivityObserver
     private lateinit var adapter: NearbyFriendAdapter
 
     private var checkJob: Job? = null
@@ -40,6 +46,8 @@ class ProximityFragment : Fragment() {
         val ctx = requireContext()
         keyManager = KeyManager(ctx)
         friendRepo = FriendRepository(ctx)
+        rangePrefs = RangePreferences(ctx)
+        connectivity = ConnectivityObserver(ctx)
 
         val e2ee = E2EEEngine(keyManager)
         val geohash = GeohashEncoder()
@@ -50,7 +58,19 @@ class ProximityFragment : Fragment() {
         val emptyState = view.findViewById<View>(R.id.empty_state)
         val statusText = view.findViewById<TextView>(R.id.proximity_status)
 
-        adapter = NearbyFriendAdapter()
+        adapter = NearbyFriendAdapter { nearbyFriend ->
+            // Find the Friend object by alias to get the public key
+            val friend = friendRepo.getAllFriends().find { it.alias == nearbyFriend.alias }
+            if (friend != null) {
+                val intent = Intent(ctx, ChatActivity::class.java).apply {
+                    putExtra(ChatActivity.EXTRA_FRIEND_ALIAS, friend.alias)
+                    putExtra(ChatActivity.EXTRA_FRIEND_PUB_KEY_HEX,
+                        keyManager.sodium.toHexStr(friend.publicKey))
+                }
+                startActivity(intent)
+            }
+        }
+
         recyclerView.layoutManager = LinearLayoutManager(ctx)
         recyclerView.adapter = adapter
 
@@ -63,11 +83,10 @@ class ProximityFragment : Fragment() {
         } else {
             recyclerView.visibility = View.VISIBLE
             emptyState.visibility = View.GONE
-            statusText.text = getString(R.string.proximity_scanning)
 
-            // TODO: Start proximity checking loop with FusedLocationProvider
-            // For now, show a placeholder message
-            statusText.text = "Location service not yet wired — ${friends.size} friends ready"
+            val mode = if (connectivity.isOnline) "🌐" else "📡"
+            val range = RangePreferences.labelFor(rangePrefs.getVisibilityPrecision())
+            statusText.text = "$mode ${friends.size} friends • scanning $range"
         }
     }
 
@@ -79,8 +98,11 @@ class ProximityFragment : Fragment() {
 
 /**
  * RecyclerView adapter for nearby friends.
+ * Tapping a friend triggers the onFriendTap callback.
  */
-class NearbyFriendAdapter : RecyclerView.Adapter<NearbyFriendAdapter.ViewHolder>() {
+class NearbyFriendAdapter(
+    private val onFriendTap: (ProximityChecker.NearbyFriend) -> Unit
+) : RecyclerView.Adapter<NearbyFriendAdapter.ViewHolder>() {
 
     private val items = mutableListOf<ProximityChecker.NearbyFriend>()
 
@@ -99,6 +121,7 @@ class NearbyFriendAdapter : RecyclerView.Adapter<NearbyFriendAdapter.ViewHolder>
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
         holder.bind(item)
+        holder.itemView.setOnClickListener { onFriendTap(item) }
     }
 
     override fun getItemCount() = items.size

@@ -28,11 +28,31 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="48dp"
+        android:layout_marginBottom="24dp"
         android:gravity="center"
         android:text="@string/onboarding_subtitle"
         android:textColor="@color/text_secondary"
         android:textSize="16sp" />
+
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.NFriend.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="48dp"
+        android:backgroundTint="#1A1C1E"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/primary_alpha"
+        app:strokeWidth="1dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:text="@string/onboarding_explanation"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:lineSpacingExtra="4dp"/>
+    </com.google.android.material.card.MaterialCardView>
 
     <!-- Alias input -->
     <com.google.android.material.textfield.TextInputLayout

@@ -139,4 +139,23 @@ class RelayClient(
             emptyList()
         }
     }
+
+    /**
+     * Quick health check to determine if the relay server is reachable.
+     * @return true if the server responds with 200 OK
+     */
+    fun isServerReachable(): Boolean {
+        val request = Request.Builder()
+            .url("$baseUrl/health")
+            .get()
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                response.isSuccessful
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

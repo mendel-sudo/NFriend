@@ -173,9 +173,8 @@ class KeyManager(private val context: Context) {
         }
 
         // Derive public key from private key
-        val publicKey = ByteArray(Box.PUBLICKEYBYTES)
-        val success = sodium.cryptoScalarmultBase(publicKey, privateKey)
-        if (!success) throw RuntimeException("Failed to derive public key")
+        val keyPair = sodium.cryptoBoxSeedKeypair(privateKey)
+        val publicKey = keyPair.publicKey.asBytes
 
         // Store both keys
         writeFile(PUB_KEY_FILENAME, publicKey)

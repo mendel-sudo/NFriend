@@ -10,20 +10,23 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.slider.Slider
 import com.nfriend.app.OnboardingActivity
 import com.nfriend.app.R
 import com.nfriend.app.crypto.KeyManager
 import com.nfriend.app.data.FriendRepository
+import com.nfriend.app.data.RangePreferences
 import com.nfriend.app.migration.DeviceMigration
 import com.nfriend.app.data.MigrationBundle
 
 /**
- * Settings screen: identity info, device migration, and data wipe.
+ * Settings screen: identity info, range control, device migration, and data wipe.
  */
 class SettingsFragment : Fragment() {
 
     private lateinit var keyManager: KeyManager
     private lateinit var friendRepo: FriendRepository
+    private lateinit var rangePrefs: RangePreferences
     private var migration: DeviceMigration? = null
 
     override fun onCreateView(
@@ -36,6 +39,7 @@ class SettingsFragment : Fragment() {
         val ctx = requireContext()
         keyManager = KeyManager(ctx)
         friendRepo = FriendRepository(ctx)
+        rangePrefs = RangePreferences(ctx)
 
         // Display identity info
         val aliasText = view.findViewById<TextView>(R.id.settings_alias)
@@ -52,6 +56,43 @@ class SettingsFragment : Fragment() {
                 android.content.ClipData.newPlainText("NFriend Public Key", pubKeyText.text)
             )
             Toast.makeText(ctx, R.string.copied, Toast.LENGTH_SHORT).show()
+        }
+
+        // ── Range Control ─────────────────────────────────────────────
+
+        val broadcastSlider = view.findViewById<Slider>(R.id.settings_broadcast_slider)
+        val broadcastLabel = view.findViewById<TextView>(R.id.settings_broadcast_label)
+        val visibilitySlider = view.findViewById<Slider>(R.id.settings_visibility_slider)
+        val visibilityLabel = view.findViewById<TextView>(R.id.settings_visibility_label)
+
+        // Initialize slider positions from saved preferences
+        broadcastSlider.value = RangePreferences.precToSlider(rangePrefs.getBroadcastPrecision()).toFloat()
+        visibilitySlider.value = RangePreferences.precToSlider(rangePrefs.getVisibilityPrecision()).toFloat()
+        broadcastLabel.text = RangePreferences.labelFor(rangePrefs.getBroadcastPrecision())
+        visibilityLabel.text = RangePreferences.labelFor(rangePrefs.getVisibilityPrecision())
+
+        broadcastSlider.addOnChangeListener { _, value, fromUser ->
+            if (!fromUser) return@addOnChangeListener
+            val prec = RangePreferences.sliderToPrec(value.toInt())
+            rangePrefs.setBroadcastPrecision(prec)
+            broadcastLabel.text = RangePreferences.labelFor(prec)
+
+            // Auto-adjust visibility if it's now finer than broadcast
+            val visPrec = rangePrefs.getVisibilityPrecision()
+            visibilitySlider.value = RangePreferences.precToSlider(visPrec).toFloat()
+            visibilityLabel.text = RangePreferences.labelFor(visPrec)
+        }
+
+        visibilitySlider.addOnChangeListener { _, value, fromUser ->
+            if (!fromUser) return@addOnChangeListener
+            val prec = RangePreferences.sliderToPrec(value.toInt())
+            rangePrefs.setVisibilityPrecision(prec)
+            visibilityLabel.text = RangePreferences.labelFor(prec)
+
+            // Auto-adjust broadcast if it's now coarser than visibility
+            val bcastPrec = rangePrefs.getBroadcastPrecision()
+            broadcastSlider.value = RangePreferences.precToSlider(bcastPrec).toFloat()
+            broadcastLabel.text = RangePreferences.labelFor(bcastPrec)
         }
 
         // ── Migration ──────────────────────────────────────────────────
@@ -91,9 +132,7 @@ class SettingsFragment : Fragment() {
                     AlertDialog.Builder(ctx)
                         .setTitle(R.string.migration_verify_title)
                         .setMessage(getString(R.string.migration_verify_message, code))
-                        .setPositiveButton(R.string.confirm) { _, _ ->
-                            // On confirm, the connection was already accepted in the callback
-                        }
+                        .setPositiveButton(R.string.confirm) { _, _ -> }
                         .setNegativeButton(R.string.cancel) { _, _ ->
                             migration?.stopAll()
                         }
@@ -103,7 +142,6 @@ class SettingsFragment : Fragment() {
             }
 
             onConnectionEstablished = {
-                // Send the migration bundle
                 val privateKey = keyManager.exportPrivateKey()
                 val alias = keyManager.getAlias() ?: ""
                 val friends = friendRepo.getAllFriends()
@@ -112,8 +150,6 @@ class SettingsFragment : Fragment() {
                     alias = alias,
                     friends = friends
                 )
-                // TODO: Get the endpoint ID from the connection callback
-                // sendMigrationBundle(endpointId, bundle)
 
                 requireActivity().runOnUiThread {
                     Toast.makeText(ctx, R.string.migration_sending, Toast.LENGTH_SHORT).show()
@@ -149,13 +185,11 @@ class SettingsFragment : Fragment() {
             }
 
             onMigrationReceived = { bundle ->
-                // Import the identity and friend list
                 keyManager.importPrivateKey(bundle.privateKey, bundle.alias)
                 friendRepo.replaceAll(bundle.friends)
 
                 requireActivity().runOnUiThread {
                     Toast.makeText(ctx, R.string.migration_success, Toast.LENGTH_LONG).show()
-                    // Refresh the settings view
                     view?.findViewById<TextView>(R.id.settings_alias)?.text = bundle.alias
                     view?.findViewById<TextView>(R.id.settings_pub_key)?.text =
                         keyManager.getPublicKeyHex() ?: ""

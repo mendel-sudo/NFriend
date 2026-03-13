@@ -12,8 +12,10 @@ import com.nfriend.app.R
 import com.nfriend.app.crypto.E2EEEngine
 import com.nfriend.app.crypto.KeyManager
 import com.nfriend.app.data.FriendRepository
+import com.nfriend.app.data.RangePreferences
 import com.nfriend.app.location.GeohashEncoder
 import com.nfriend.app.location.ProximityChecker
+import com.nfriend.app.network.ConnectivityObserver
 import com.nfriend.app.network.RelayClient
 import kotlinx.coroutines.*
 
@@ -21,7 +23,8 @@ import kotlinx.coroutines.*
  * Foreground service that periodically checks proximity to friends.
  *
  * Runs FusedLocationProvider → GeohashEncoder → relay drop/pickup cycle.
- * Displays a persistent notification while active.
+ * Uses configurable broadcast/visibility range from RangePreferences.
+ * Falls back to mesh networking when offline.
  */
 class ProximityService : Service() {
 
@@ -35,6 +38,8 @@ class ProximityService : Service() {
     private lateinit var proximityChecker: ProximityChecker
     private lateinit var keyManager: KeyManager
     private lateinit var friendRepo: FriendRepository
+    private lateinit var rangePrefs: RangePreferences
+    private lateinit var connectivity: ConnectivityObserver
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var checkJob: Job? = null
@@ -44,6 +49,8 @@ class ProximityService : Service() {
 
         keyManager = KeyManager(this)
         friendRepo = FriendRepository(this)
+        rangePrefs = RangePreferences(this)
+        connectivity = ConnectivityObserver(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         val e2ee = E2EEEngine(keyManager)
@@ -78,7 +85,6 @@ class ProximityService : Service() {
                 try {
                     performProximityCheck()
                 } catch (e: Exception) {
-                    // Log but don't crash the service
                     android.util.Log.e("ProximityService", "Check failed: ${e.message}")
                 }
                 delay(CHECK_INTERVAL_MS)
@@ -93,21 +99,26 @@ class ProximityService : Service() {
 
         val pubKey = keyManager.getPublicKey() ?: return
 
-        // Get last known location
+        // Read user's range preferences
+        val broadcastPrec = rangePrefs.getBroadcastPrecision()
+        val visibilityPrec = rangePrefs.getVisibilityPrecision()
+
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
             if (location == null) return@addOnSuccessListener
 
             serviceScope.launch {
-                val results = proximityChecker.checkProximity(
+                val result = proximityChecker.checkProximity(
                     latitude = location.latitude,
                     longitude = location.longitude,
                     myPublicKey = pubKey,
-                    friends = friends
+                    friends = friends,
+                    broadcastPrecision = broadcastPrec,
+                    visibilityPrecision = visibilityPrec
                 )
 
                 // Update the persistent notification
-                val message = if (results.isNotEmpty()) {
-                    "${results.size} friend(s) nearby!"
+                val message = if (result.nearbyFriends.isNotEmpty()) {
+                    "${result.nearbyFriends.size} friend(s) nearby!"
                 } else {
                     "No friends nearby. Last scan: ${
                         java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
@@ -116,8 +127,8 @@ class ProximityService : Service() {
                 }
                 updateNotification(message)
 
-                // TODO: Broadcast results to ProximityFragment if it's visible
-                // (use LocalBroadcastManager or LiveData through a shared ViewModel)
+                // TODO: Broadcast results to ProximityFragment
+                // TODO: Broadcast received chat/pin payloads to ChatActivity
             }
         }
     }

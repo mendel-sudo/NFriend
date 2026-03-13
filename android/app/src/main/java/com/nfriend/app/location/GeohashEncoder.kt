@@ -112,4 +112,31 @@ class GeohashEncoder {
         val hash = mac.doFinal(geohash.toByteArray())
         return hash.joinToString("") { "%02x".format(it) }
     }
+
+    /**
+     * Compute HMAC'd geohash neighborhoods at multiple precision levels.
+     * Used for multi-precision drops so friends scanning at wider ranges
+     * can still match envelopes.
+     *
+     * @param lat        Latitude
+     * @param lng        Longitude
+     * @param precisions List of geohash precisions (e.g. [7, 6, 5])
+     * @param salt       Current epoch salt
+     * @return Deduplicated list of HMAC'd geohash strings across all precisions
+     */
+    fun getMultiPrecisionHashes(
+        lat: Double,
+        lng: Double,
+        precisions: List<Int>,
+        salt: String
+    ): List<String> {
+        val allHashes = mutableSetOf<String>()
+        for (prec in precisions) {
+            val cells = getNeighborhood(lat, lng, prec)
+            for (cell in cells) {
+                allHashes.add(hmacHash(cell, salt))
+            }
+        }
+        return allHashes.toList()
+    }
 }
