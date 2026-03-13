@@ -1,0 +1,63 @@
+<resources>
+    <string name="app_name">NFriend</string>
+
+    <!-- Navigation -->
+    <string name="nav_proximity">Nearby</string>
+    <string name="nav_friends">Friends</string>
+    <string name="nav_qr">QR Swap</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Welcome to NFriend</string>
+    <string name="onboarding_subtitle">Privacy-first proximity. No accounts. No cloud.</string>
+    <string name="onboarding_alias_hint">Choose a display name</string>
+    <string name="onboarding_create">Create Identity</string>
+    <string name="onboarding_generating">Generating secure keys…</string>
+
+    <!-- Proximity -->
+    <string name="proximity_title">Nearby Friends</string>
+    <string name="proximity_empty">No friends nearby right now.\nAdd friends via QR swap to get started.</string>
+    <string name="proximity_scanning">Scanning…</string>
+    <string name="proximity_last_check">Last check: %s</string>
+
+    <!-- Friends -->
+    <string name="friends_title">Friends</string>
+    <string name="friends_empty">No friends yet.\nSwap QR codes in person to add friends.</string>
+    <string name="friends_count">%d friends</string>
+    <string name="friends_remove_confirm">Remove %s from your friend list?</string>
+    <string name="friends_added">Added %s as a friend!</string>
+
+    <!-- QR Exchange -->
+    <string name="qr_my_code">My Code</string>
+    <string name="qr_scan">Scan</string>
+    <string name="qr_show_title">Show this to your friend</string>
+    <string name="qr_scan_title">Scan your friend\'s code</string>
+    <string name="qr_scan_instructions">Point your camera at your friend\'s QR code</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_identity">Your Identity</string>
+    <string name="settings_pub_key">Public Key</string>
+    <string name="settings_alias">Display Name</string>
+    <string name="settings_migration">Device Migration</string>
+    <string name="settings_migrate_send">Send to New Phone</string>
+    <string name="settings_migrate_receive">Receive from Old Phone</string>
+    <string name="settings_migrate_warning">This will beam your private key and friend list via Bluetooth/Wi-Fi. Both phones must be nearby.</string>
+    <string name="settings_danger_zone">Danger Zone</string>
+    <string name="settings_wipe">Wipe All Data</string>
+    <string name="settings_wipe_confirm">This will permanently delete your identity, private key, and all friends. This cannot be undone.</string>
+    <string name="settings_wipe_button">Wipe Everything</string>
+
+    <!-- Migration -->
+    <string name="migration_verify_title">Verify Connection</string>
+    <string name="migration_verify_message">Do both phones show this code?\n\n%s</string>
+    <string name="migration_sending">Sending identity…</string>
+    <string name="migration_receiving">Waiting for old phone…</string>
+    <string name="migration_success">Migration complete!</string>
+    <string name="migration_wipe_prompt">Wipe data on this device?</string>
+
+    <!-- General -->
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+    <string name="copied">Copied to clipboard</string>
+</resources>

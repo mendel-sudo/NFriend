@@ -1,0 +1,21 @@
+# android
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/app/keystore.jks
+android/app/*.jks
+
+# backend
+backend/node_modules/
+backend/data/
+backend/.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/

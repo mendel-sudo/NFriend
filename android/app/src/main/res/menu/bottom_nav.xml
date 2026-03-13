@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_proximity"
+        android:icon="@android:drawable/ic_menu_compass"
+        android:title="@string/nav_proximity" />
+    <item
+        android:id="@+id/nav_friends"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:title="@string/nav_friends" />
+    <item
+        android:id="@+id/nav_qr"
+        android:icon="@android:drawable/ic_menu_camera"
+        android:title="@string/nav_qr" />
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:title="@string/nav_settings" />
+</menu>

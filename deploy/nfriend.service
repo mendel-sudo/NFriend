@@ -1,0 +1,30 @@
+[Unit]
+Description=NFriend Blind Relay Server
+After=network.target
+
+[Service]
+Type=simple
+User=nfriend
+Group=nfriend
+WorkingDirectory=/opt/nfriend/backend
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nfriend
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/nfriend/backend/data
+PrivateTmp=true
+
+# Environment
+Environment=NODE_ENV=production
+Environment=PORT=3000
+EnvironmentFile=/opt/nfriend/backend/.env
+
+[Install]
+WantedBy=multi-user.target
